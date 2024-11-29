@@ -1,13 +1,13 @@
-use tokio::sync::Mutex;
-use tokio::net::{TcpStream, TcpListener};
-use std::sync::Arc;
-use crate::wake_on_lan::{WakeOnLan, WolError};
-use uuid::Uuid;
 use crate::machine::Machine;
+use crate::wake_on_lan::{WakeOnLan, WolError};
+use mac_address::MacAddress;
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use mac_address::MacAddress;
-use tracing::{info, error};
+use std::sync::Arc;
+use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::Mutex;
+use tracing::{error, info};
+use uuid::Uuid;
 
 pub struct MachineServer {
     listener: TcpListener,
@@ -17,7 +17,7 @@ pub struct MachineServer {
 impl MachineServer {
     pub async fn new(addr: SocketAddr) -> Result<Self, std::io::Error> {
         let listener = TcpListener::bind(addr).await?;
-        
+
         info!("Server listening on {}", addr);
 
         Ok(Self {
@@ -27,36 +27,29 @@ impl MachineServer {
     }
 
     pub async fn run(self) -> Result<(), Box<dyn std::error::Error>> {
+        let machines = Arc::clone(&self.machines);
+        let listener = self.listener;
         loop {
-            let (socket, addr) = self.listener.accept().await?;
-            
+            let (socket, addr) = listener.accept().await?;
+
             // Clone the machines Arc for the handler
-            let machines_clone = Arc::clone(&self.machines);
-            
+            let machines_clone = Arc::clone(&machines);
+
             // Spawn a new task to handle the connection
             tokio::spawn(async move {
-                if let Err(e) = self.handle_connection(socket, machines_clone).await {
+                if let Err(e) = handle_connection(socket, machines_clone).await {
                     error!("Error handling connection from {}: {}", addr, e);
                 }
             });
         }
     }
-
-    async fn handle_connection(
-        &self, 
-        mut socket: TcpStream, 
-        machines: Arc<Mutex<HashMap<Uuid, Machine>>>
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        // Connection handling logic
-        // TODO: Implement protocol for registering machines, sending wake commands, etc.
-        Ok(())
-    }
+   
 
     pub async fn register_machine(
-        &self, 
-        name: String, 
-        mac_address: MacAddress, 
-        ip_address: Option<String>
+        &self,
+        name: String,
+        mac_address: MacAddress,
+        ip_address: Option<String>,
     ) -> Uuid {
         let machine = Machine::new(name, mac_address, ip_address);
         let machine_id = machine.id;
@@ -77,3 +70,11 @@ impl MachineServer {
     }
 }
 
+async fn handle_connection(
+        socket: TcpStream,
+        machines: Arc<Mutex<HashMap<Uuid, Machine>>>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // Connection handling logic
+        // TODO: Implement protocol for registering machines, sending wake commands, etc.
+        Ok(())
+    }

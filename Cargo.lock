@@ -324,22 +324,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "remote-machine-manager"
-version = "0.1.0"
-dependencies = [
- "local-ip-address",
- "mac_address",
- "macaddr",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
 name = "rustc-demangle"
 version = "0.1.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -412,6 +396,22 @@ name = "smallvec"
 version = "1.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c5e1a9a646d36c3599cd173a41282daf47c44583ad367b8e6837255952e5c67"
+
+[[package]]
+name = "smwWoLtool"
+version = "0.1.0"
+dependencies = [
+ "local-ip-address",
+ "mac_address",
+ "macaddr",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
 
 [[package]]
 name = "socket2"
