@@ -2,6 +2,7 @@ use tokio::net::TcpStream;
 use std::net::SocketAddr;
 use serde::{Serialize, Deserialize};
 use uuid::Uuid;
+use anyhow::Error;
 
 #[derive(Serialize, Deserialize)]
 enum ClientMessage {
@@ -23,7 +24,7 @@ impl RemoteMachineClient {
         Self { server_addr }
     }
 
-    pub async fn connect(&self) -> Result<TcpStream, std::io::Error> {
-        TcpStream::connect(self.server_addr).await
+    pub async fn connect(&self) -> Result<TcpStream, Error> {
+        Ok(TcpStream::connect(self.server_addr).await?)
     }
 }

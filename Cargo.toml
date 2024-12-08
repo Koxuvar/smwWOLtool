@@ -14,3 +14,4 @@ thiserror = "1.0"
 mac_address = "1.1"
 local-ip-address = "0.5"
 macaddr = {version = "1.0.1", features = ["serde"] }
+anyhow = "1.0.94"
