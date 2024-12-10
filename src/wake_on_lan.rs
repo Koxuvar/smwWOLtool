@@ -1,20 +1,12 @@
 use tokio::net::UdpSocket;
-use thiserror::Error;
 use mac_address::MacAddress;
-use tracing::{info, error};
-
-#[derive(Error, Debug)]
-pub enum WolError {
-    #[error("Invalid MAC Address")]
-    InvalidMacAddress,
-    #[error("Network error during WoL packet transmission")]
-    NetworkError(#[from] std::io::Error),
-}
+use tracing::info;
+use anyhow::Error;
 
 pub struct WakeOnLan;
 
 impl WakeOnLan {
-    pub async fn send_magic_packet(mac_address:MacAddress) -> Result<(), WolError> {
+    pub async fn send_magic_packet(mac_address:MacAddress) -> Result<(), Error> {
         let mut packet = vec![0xFF; 6];
 
         let mac_bytes = mac_address.bytes();

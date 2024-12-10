@@ -1,4 +1,5 @@
 use tracing::Level;
+use anyhow::Error;
 
 mod machine;
 mod wake_on_lan;
@@ -7,7 +8,7 @@ mod client;
 
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {    
+async fn main() -> Result<(), Error> {    
     
     //Setup Logging
     tracing_subscriber::fmt()
@@ -16,7 +17,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 
     //start the server
-    let addr = "0.0.0.0:9876".parse()?;
+    let addr = "127.0.0.1:9876".parse()?;
     let server = server::MachineServer::new(addr).await?;
     server.run().await
 
