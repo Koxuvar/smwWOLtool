@@ -11,7 +11,6 @@ use tokio::sync::Mutex;
 
 use mac_address::MacAddress;
 use serde::{Serialize, Deserialize};
-use anyhow::Error;
 use tracing::info;
 use uuid::Uuid;
 
@@ -21,7 +20,7 @@ pub struct MachineServer {
 }
 
 impl MachineServer {
-    pub async fn new(addr: SocketAddr) -> Result<Self, Error> {
+    pub async fn new(addr: SocketAddr) -> Result<Self, anyhow::Error> {
         let listener = TcpListener::bind(addr).await?;
 
         info!("Server listening on {}", addr);
@@ -47,7 +46,7 @@ impl MachineServer {
         machine_id
     }
 
-    pub async fn wake_machine(&self, machine_id: Uuid) -> Result<(), Error> {
+    pub async fn wake_machine(&self, machine_id: Uuid) -> Result<(), anyhow::Error> {
         let machines = self.machines.lock().await;
         if let Some(machine) = machines.get(&machine_id) {
             WakeOnLan::send_magic_packet(machine.mac_address).await
@@ -56,7 +55,7 @@ impl MachineServer {
         }
     }
 
-    pub async fn run (self) -> Result<(), Error> {
+    pub async fn run (self) -> Result<(), anyhow::Error> {
         let listener = self.listener;
         loop{
             let machines = Arc::clone(&self.machines);
@@ -89,7 +88,7 @@ enum ServerMessage {
 async fn handle_connection(
     mut socket: TcpStream,
     &machines: &Arc<Mutex<HashMap<Uuid, Machine>>>,
-) -> Result<(), Error> {
+) -> Result<(), anyhow::Error> {
     // Connection handling logic
 
     let mut buffer = [0; 1024];
