@@ -6,11 +6,12 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use tokio::io::AsyncReadExt;
+use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::Mutex;
 
-use mac_address::MacAddress;
-use serde::{Serialize, Deserialize};
+use macaddr::MacAddr6;
+use serde::{Deserialize, Serialize};
 use tracing::info;
 use uuid::Uuid;
 
@@ -34,7 +35,7 @@ impl MachineServer {
     pub async fn register_machine(
         &self,
         name: String,
-        mac_address: MacAddress,
+        mac_address: MacAddr6,
         ip_address: Option<String>,
     ) -> Uuid {
         let machine: Machine = Machine::new(name, mac_address, ip_address);
@@ -51,28 +52,27 @@ impl MachineServer {
         if let Some(machine) = machines.get(&machine_id) {
             WakeOnLan::send_magic_packet(machine.mac_address).await
         } else {
-            Err(std::error::Error)
+            Err(anyhow::anyhow!("Cant Find that machine on the network!"))
         }
     }
 
-    pub async fn run (self) -> Result<(), anyhow::Error> {
+    pub async fn run(self) -> Result<(), anyhow::Error> {
         let listener = self.listener;
-        loop{
+        loop {
             let machines = Arc::clone(&self.machines);
             let (socket, _) = listener.accept().await?;
             tokio::spawn(async move {
-               handle_connection(socket, &machines).await;
+                handle_connection(socket, &machines).await;
             });
         }
     }
 }
 
-
 #[derive(Serialize, Deserialize)]
 enum ServerMessage {
     RegisterMachine {
         name: String,
-        mac_address: MacAddress,
+        mac_address: MacAddr6,
     },
     WakeMachine {
         machine_id: Uuid,
@@ -87,7 +87,7 @@ enum ServerMessage {
 
 async fn handle_connection(
     mut socket: TcpStream,
-    &machines: &Arc<Mutex<HashMap<Uuid, Machine>>>,
+    machines: &Arc<Mutex<HashMap<Uuid, Machine>>>,
 ) -> Result<(), anyhow::Error> {
     // Connection handling logic
 
@@ -100,33 +100,31 @@ async fn handle_connection(
 
     let message: ServerMessage = match serde_json::from_slice(&buffer[..n]) {
         Ok(msg) => msg,
-        Err(e) => {
-            error!("Failed to parse message: {}", e);
+        Err(_e) => {
             let response = ServerMessage::Response {
                 success: false,
                 message: "Invalid message format".to_string(),
                 data: None,
             };
-            socket.write_all(&serde_json::to_vec(&response)?).await?;
+            socket.write(&serde_json::to_vec(&response)?).await?;
             return Ok(());
         }
     };
 
     let response = match message {
         ServerMessage::RegisterMachine { name, mac_address } => {
-            // Parse MAC address
-            let mac = match mac_address.bytes().map(|x| x.to_string()){
-                Ok(mac) => mac,
-                Err(_) => ServerMessage::Response {
+            // Parse MAC addres
+            if !mac_address.is_nil() {
+                ServerMessage::Response {
                     success: false,
-                    message: "Invalid MAC address".to_string(),
+                    message: "Mac address is not correct".to_string(),
                     data: None,
-                },
-            };
+                }
+            } else {
 
             // Register the machine
             let mut machines_lock = machines.lock().await;
-            let machine = Machine::new(name, mac, None);
+            let machine = Machine::new(name, mac_address, None);
             let machine_id = machine.id;
             machines_lock.insert(machine_id, machine);
 
@@ -134,6 +132,7 @@ async fn handle_connection(
                 success: true,
                 message: "Machine registered successfully".to_string(),
                 data: Some(machine_id.to_string()),
+            }
             }
         }
         ServerMessage::WakeMachine { machine_id } => {
@@ -173,6 +172,11 @@ async fn handle_connection(
                 message: "Machines listed".to_string(),
                 data: Some(machine_list.join(", ")),
             }
+        }
+        _ => ServerMessage::Response {
+                success: false,
+                message: "nothing to do".to_string(),
+                data:None,
         }
     };
 

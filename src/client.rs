@@ -1,6 +1,7 @@
 use tokio::net::TcpStream;
 use std::net::SocketAddr;
 use serde::{Serialize, Deserialize};
+use macaddr::MacAddr6;
 use uuid::Uuid;
 use anyhow::Error;
 
@@ -8,7 +9,7 @@ use anyhow::Error;
 enum ClientMessage {
     RegisterMachine {
         name: String,
-        mac_address: String,
+        mac_address: MacAddr6,
     },
     WakeMachine {
         machine_id: Uuid,

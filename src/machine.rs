@@ -1,17 +1,17 @@
 use uuid::Uuid;
-use mac_address::MacAddress;
+use macaddr::MacAddr6;
 use std::time::SystemTime;
 
 pub struct Machine {
     pub id: Uuid,
     pub name: String,
-    pub mac_address: MacAddress,
+    pub mac_address: MacAddr6,
     pub ip_address: Option<String>, 
     pub registered_at: SystemTime,
 }
 
 impl Machine {
-    pub fn new(name: String, mac_address: MacAddress, ip_address: Option<String>) -> Self {
+    pub fn new(name: String, mac_address: MacAddr6 , ip_address: Option<String>) -> Self {
         Self{
             id: Uuid::new_v4(),
             name,

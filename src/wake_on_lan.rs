@@ -1,15 +1,15 @@
 use tokio::net::UdpSocket;
-use mac_address::MacAddress;
+use macaddr::MacAddr6;
 use tracing::info;
 use anyhow::Error;
 
 pub struct WakeOnLan;
 
 impl WakeOnLan {
-    pub async fn send_magic_packet(mac_address:MacAddress) -> Result<(), Error> {
+    pub async fn send_magic_packet(mac_address:MacAddr6) -> Result<(), Error> {
         let mut packet = vec![0xFF; 6];
 
-        let mac_bytes = mac_address.bytes();
+        let mac_bytes = mac_address.as_bytes();
         for _ in 0..16 {
             packet.extend_from_slice(&mac_bytes);
         }
