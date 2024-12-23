@@ -20,6 +20,24 @@ pub struct MachineServer {
     machines: Arc<Mutex<HashMap<Uuid, Machine>>>,
 }
 
+#[derive(Serialize, Deserialize)]
+enum ServerMessage {
+    RegisterMachine {
+        name: String,
+        mac_address: MacAddr6,
+    },
+    WakeMachine {
+        machine_id: Uuid,
+    },
+    ListMachines,  
+}
+
+#[derive(Serialize, Deserialize)]
+struct Response{
+    success:bool,
+    message: String,
+    data: Option<String>,
+}
 impl MachineServer {
     pub async fn new(addr: SocketAddr) -> Result<Self, anyhow::Error> {
         let listener = TcpListener::bind(addr).await?;
@@ -68,22 +86,6 @@ impl MachineServer {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-enum ServerMessage {
-    RegisterMachine {
-        name: String,
-        mac_address: MacAddr6,
-    },
-    WakeMachine {
-        machine_id: Uuid,
-    },
-    ListMachines,
-    Response {
-        success: bool,
-        message: String,
-        data: Option<String>,
-    },
-}
 
 async fn handle_connection(
     mut socket: TcpStream,
@@ -101,7 +103,7 @@ async fn handle_connection(
     let message: ServerMessage = match serde_json::from_slice(&buffer[..n]) {
         Ok(msg) => msg,
         Err(_e) => {
-            let response = ServerMessage::Response {
+            let response = Response {
                 success: false,
                 message: "Invalid message format".to_string(),
                 data: None,
@@ -115,7 +117,7 @@ async fn handle_connection(
         ServerMessage::RegisterMachine { name, mac_address } => {
             // Parse MAC addres
             if !mac_address.is_nil() {
-                ServerMessage::Response {
+                Response {
                     success: false,
                     message: "Mac address is not correct".to_string(),
                     data: None,
@@ -128,7 +130,7 @@ async fn handle_connection(
             let machine_id = machine.id;
             machines_lock.insert(machine_id, machine);
 
-            ServerMessage::Response {
+            Response {
                 success: true,
                 message: "Machine registered successfully".to_string(),
                 data: Some(machine_id.to_string()),
@@ -141,19 +143,19 @@ async fn handle_connection(
                 Some(machine) => {
                     // Send wake-on-lan packet
                     match WakeOnLan::send_magic_packet(machine.mac_address).await {
-                        Ok(_) => ServerMessage::Response {
+                        Ok(_) => Response {
                             success: true,
                             message: "Wake packet sent".to_string(),
                             data: None,
                         },
-                        Err(_) => ServerMessage::Response {
+                        Err(_) => Response {
                             success: false,
                             message: "Failed to send wake packet".to_string(),
                             data: None,
                         },
                     }
                 }
-                None => ServerMessage::Response {
+                None => Response {
                     success: false,
                     message: "Machine not found".to_string(),
                     data: None,
@@ -167,17 +169,13 @@ async fn handle_connection(
                 .map(|machine| format!("{}: {}", machine.id, machine.name))
                 .collect();
 
-            ServerMessage::Response {
+           Response {
                 success: true,
                 message: "Machines listed".to_string(),
                 data: Some(machine_list.join(", ")),
             }
         }
-        _ => ServerMessage::Response {
-                success: false,
-                message: "nothing to do".to_string(),
-                data:None,
-        }
+       
     };
 
     // Send response back to client
