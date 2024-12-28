@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpListener;
 use tokio::sync::Mutex;
 
 use macaddr::MacAddr6;
@@ -21,23 +21,19 @@ pub struct MachineServer {
 }
 
 #[derive(Serialize, Deserialize)]
-enum ServerMessage {
-    RegisterMachine {
-        name: String,
-        mac_address: MacAddr6,
-    },
-    WakeMachine {
-        machine_id: Uuid,
-    },
-    ListMachines,  
+pub enum ServerMessage {
+    RegisterMachine { name: String, mac_address: MacAddr6 },
+    WakeMachine { machine_id: Uuid },
+    ListMachines,
 }
 
 #[derive(Serialize, Deserialize)]
-struct Response{
-    success:bool,
+pub struct Response {
+    success: bool,
     message: String,
     data: Option<String>,
 }
+
 impl MachineServer {
     pub async fn new(addr: SocketAddr) -> Result<Self, anyhow::Error> {
         let listener = TcpListener::bind(addr).await?;
@@ -74,113 +70,69 @@ impl MachineServer {
         }
     }
 
-    pub async fn run(self) -> Result<(), anyhow::Error> {
-        let listener = self.listener;
+    pub async fn list_machines(&self) -> Result<Vec<Machine>, anyhow::Error> {
+        let machines = self.machines.lock().await;
+        let machlist: Vec<Machine> = machines.values().cloned().collect();
+        Ok(machlist)
+    }
+
+    pub async fn listen(&self) {
+        let (mut socket, _) = self.listener.accept().await.unwrap();
+
+        let mut buffer = [0; 1024];
         loop {
-            let machines = Arc::clone(&self.machines);
-            let (socket, _) = listener.accept().await?;
-            tokio::spawn(async move {
-                handle_connection(socket, &machines).await;
-            });
-        }
-    }
-}
+            let n = socket.read(&mut buffer).await.unwrap();
+            if n == 0 {
+               continue;
+            }
 
+            let message: ServerMessage = serde_json::from_slice(&buffer[..n]).expect("Failed to deserialize message"); 
 
-async fn handle_connection(
-    mut socket: TcpStream,
-    machines: &Arc<Mutex<HashMap<Uuid, Machine>>>,
-) -> Result<(), anyhow::Error> {
-    // Connection handling logic
+            match message {
+                ServerMessage::RegisterMachine { name, mac_address } => {
+                    let machine_id = self.register_machine(name, mac_address, None).await;
+                    let response = Response {
+                        success: true,
+                        message: "Registered machine".to_string(),
+                        data: Some(machine_id.to_string()),
+                    };
 
-    let mut buffer = [0; 1024];
-
-    let n = socket.read(&mut buffer).await?;
-    if n == 0 {
-        return Ok(());
-    }
-
-    let message: ServerMessage = match serde_json::from_slice(&buffer[..n]) {
-        Ok(msg) => msg,
-        Err(_e) => {
-            let response = Response {
-                success: false,
-                message: "Invalid message format".to_string(),
-                data: None,
-            };
-            socket.write(&serde_json::to_vec(&response)?).await?;
-            return Ok(());
-        }
-    };
-
-    let response = match message {
-        ServerMessage::RegisterMachine { name, mac_address } => {
-            // Parse MAC addres
-            if !mac_address.is_nil() {
-                Response {
-                    success: false,
-                    message: "Mac address is not correct".to_string(),
-                    data: None,
+                    let response = serde_json::to_vec(&response).unwrap();
+                    socket.write_all(&response).await.unwrap();
                 }
-            } else {
-
-            // Register the machine
-            let mut machines_lock = machines.lock().await;
-            let machine = Machine::new(name, mac_address, None);
-            let machine_id = machine.id;
-            machines_lock.insert(machine_id, machine);
-
-            Response {
-                success: true,
-                message: "Machine registered successfully".to_string(),
-                data: Some(machine_id.to_string()),
-            }
-            }
-        }
-        ServerMessage::WakeMachine { machine_id } => {
-            let machines_lock = machines.lock().await;
-            match machines_lock.get(&machine_id) {
-                Some(machine) => {
-                    // Send wake-on-lan packet
-                    match WakeOnLan::send_magic_packet(machine.mac_address).await {
+                ServerMessage::WakeMachine { machine_id } => {
+                    let wake_success = self.wake_machine(machine_id).await;
+                    let response = match wake_success {
                         Ok(_) => Response {
                             success: true,
-                            message: "Wake packet sent".to_string(),
+                            message: "Machine woken".to_string(),
                             data: None,
                         },
-                        Err(_) => Response {
+                        Err(e) => Response {
                             success: false,
-                            message: "Failed to send wake packet".to_string(),
+                            message: e.to_string(),
                             data: None,
                         },
-                    }
+                    };
+
+                    let response = serde_json::to_vec(&response).unwrap();
+                    socket.write_all(&response).await.unwrap();
                 }
-                None => Response {
-                    success: false,
-                    message: "Machine not found".to_string(),
-                    data: None,
-                },
+                ServerMessage::ListMachines => {
+                    let machines = self.list_machines().await.unwrap();
+                    let response = Response {
+                        success: true,
+                        message: "Machines listed".to_string(),
+                        data: Some(
+                            serde_json::to_string(&machines)
+                                .expect("Failed to serialize machine list"),
+                        ),
+                    };
+                    let response = serde_json::to_vec(&response).unwrap();
+                    socket.write_all(&response).await.unwrap();
+                }
             }
         }
-        ServerMessage::ListMachines => {
-            let machines_lock = machines.lock().await;
-            let machine_list: Vec<String> = machines_lock
-                .values()
-                .map(|machine| format!("{}: {}", machine.id, machine.name))
-                .collect();
 
-           Response {
-                success: true,
-                message: "Machines listed".to_string(),
-                data: Some(machine_list.join(", ")),
-            }
-        }
-       
-    };
-
-    // Send response back to client
-    socket.write_all(&serde_json::to_vec(&response)?).await?;
-    socket.flush().await?;
-
-    Ok(())
+    }
 }

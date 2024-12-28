@@ -1,7 +1,9 @@
 use uuid::Uuid;
 use macaddr::MacAddr6;
 use std::time::SystemTime;
+use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Machine {
     pub id: Uuid,
     pub name: String,
